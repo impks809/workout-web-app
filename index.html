@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Ladder — V-Taper Home Program</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg: #0B0E12;
+    --surface: rgba(255,255,255,0.055);
+    --surface-raised: rgba(255,255,255,0.09);
+    --line: rgba(255,255,255,0.14);
+    --text: #F3F1EA;
+    --text-dim: #A6ACB3;
+    --accent: #8FBF7F;       /* sprout green — growth / unlocked */
+    --accent-dim: #4E6B47;
+    --locked: rgba(255,255,255,0.28);
+    --warn: #E0B355;
+    --danger: #E38C7E;
+    --radius: 18px;
+    --radius-sm: 12px;
+    --radius-pill: 999px;
+    --glass-blur: blur(14px) saturate(140%);
+    --glass-blur-light: blur(8px);
+    --glass-shadow: 0 10px 34px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.16), inset 0 0 0 1px rgba(255,255,255,0.04);
+    --glass-shadow-sm: 0 4px 14px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(760px 560px at 8% -8%, rgba(143,191,127,0.30), transparent 60%),
+      radial-gradient(680px 520px at 96% 6%, rgba(224,179,85,0.22), transparent 60%),
+      radial-gradient(820px 640px at 50% 100%, rgba(88,120,196,0.24), transparent 65%),
+      radial-gradient(600px 480px at 90% 80%, rgba(227,140,126,0.16), transparent 60%),
+      var(--bg);
+    background-attachment:scroll;
+    color:var(--text);
+    font-family:'IBM Plex Sans', system-ui, sans-serif;
+    line-height:1.5;
+    min-height:100vh;
+    padding-bottom:130px;
+  }
+
+  h1,h2,h3{ font-family:'Oswald', sans-serif; letter-spacing:.02em; margin:0; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+
+  a{ color:var(--accent); }
+
+  /* ---------- Liquid glass base (shared material) ----------
+     Blur is expensive, especially stacked on mobile GPUs, so it's applied
+     only to the handful of large, static surfaces where it actually reads
+     as "glass" — not to every small input, button, or nested row.
+     The sticky header is deliberately excluded: a backdrop-blurred element
+     that stays pinned during scroll forces a re-blur of everything behind
+     it on every single scroll frame, which is the biggest source of jank
+     in glass UIs. A solid-ish background reads close enough to glass here
+     without that cost. */
+  .card, details.history, .rest-bar, .modal{
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    isolation: isolate;
+    transform: translateZ(0);
+  }
+  /* Small, frequently-repeated elements (day boxes, header buttons, edit
+     rows) skip backdrop-filter entirely — a translucent background plus a
+     bright border reads as "glass" well enough at this size, at near-zero
+     compositing cost compared to blurring each one individually. */
+  .stat, .verify-code{
+    backdrop-filter: var(--glass-blur-light);
+    -webkit-backdrop-filter: var(--glass-blur-light);
+  }
+
+  /* ---------- Top bar ---------- */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; border-bottom:1px solid var(--line);
+    position:sticky; top:0; background:rgba(13,16,20,0.92); z-index:20;
+    box-shadow:0 1px 0 rgba(255,255,255,0.08), 0 12px 24px -12px rgba(0,0,0,0.5);
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand .rung-mark{
+    width:15px; height:15px; border-radius:5px; transform:rotate(45deg);
+    background:linear-gradient(135deg, rgba(143,191,127,0.95), rgba(143,191,127,0.35));
+    box-shadow:0 0 12px rgba(143,191,127,0.55), inset 0 1px 1px rgba(255,255,255,0.6);
+  }
+  .brand h1{ font-size:1.15rem; text-transform:uppercase; }
+  .brand small{ display:block; color:var(--text-dim); font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; }
+  .top-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .icon-btn{
+    background:rgba(255,255,255,0.09); border:1px solid var(--line); color:var(--text-dim);
+    padding:9px 14px; border-radius:var(--radius-pill); cursor:pointer; font-size:.78rem;
+    font-family:'IBM Plex Sans'; transition:background-color .18s, border-color .18s, color .18s;
+    box-shadow: var(--glass-shadow-sm);
+  }
+  .icon-btn:hover{ border-color:rgba(143,191,127,0.5); color:var(--text); background:rgba(143,191,127,0.10); }
+
+  /* ---------- Layout ---------- */
+  .layout{
+    max-width:1080px; margin:0 auto; padding:28px 24px;
+  }
+
+  /* ---------- Ladder (signature element) ---------- */
+  .ladder{ position:relative; }
+  .ladder-title{ display:none; }
+
+  /* ---------- Stats strip ---------- */
+  .stats{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:20px; }
+  .stat{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 18px; min-width:120px;
+    box-shadow: var(--glass-shadow);
+  }
+  .stat .num{ font-family:'IBM Plex Mono'; font-size:1.5rem; color:var(--accent); text-shadow:0 0 18px rgba(143,191,127,0.45); }
+  .stat .label{ color:var(--text-dim); font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; }
+
+  /* ---------- Today card ---------- */
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:24px;
+    padding:24px; margin-bottom:18px;
+    box-shadow: var(--glass-shadow);
+    position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:''; position:absolute; inset:0 0 auto 0; height:1px;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+  }
+  .day-eyebrow{ color:var(--text-dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.1em; margin-bottom:4px; }
+  .day-title{ font-size:1.4rem; margin-bottom:2px; }
+  .day-focus{ color:var(--text-dim); font-size:.88rem; margin-bottom:18px; }
+  .day-progress{ color:var(--text-dim); font-size:.72rem; letter-spacing:.05em; margin-bottom:14px; }
+
+  .exercise{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:16px 0; border-top:1px solid var(--line);
+  }
+  .exercise:first-of-type{ border-top:none; }
+  .ex-name{ font-weight:600; }
+  .ex-detail{ color:var(--text-dim); font-size:.82rem; font-family:'IBM Plex Mono'; margin-top:2px; }
+  .ex-done .ex-name{ text-decoration:line-through; color:var(--text-dim); }
+  .ex-challenge{
+    background:rgba(224,179,85,0.09); margin:0 -24px; padding-left:24px; padding-right:24px;
+    border-radius:var(--radius-sm);
+  }
+  .ex-challenge .ex-name{ color:var(--warn); }
+  .ex-btn{
+    background:rgba(143,191,127,0.10); border:1px solid rgba(143,191,127,0.4); color:var(--accent);
+    padding:9px 16px; border-radius:var(--radius-pill); cursor:pointer; font-size:.8rem; white-space:nowrap;
+    transition:background-color .18s, transform .18s, box-shadow .18s; box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+  }
+  .ex-btn:hover{ background:rgba(143,191,127,0.20); transform:translateY(-1px); }
+  .ex-btn:disabled{ border-color:var(--line); color:var(--text-dim); cursor:default; background:none; transform:none; }
+
+  .complete-day-btn{
+    width:100%; margin-top:10px; padding:15px; border-radius:var(--radius-pill); border:1px solid rgba(255,255,255,0.25);
+    background:linear-gradient(180deg, rgba(143,191,127,0.95), rgba(122,171,107,0.95)); color:#0E1A0E; font-weight:600; font-size:.95rem; cursor:pointer;
+    font-family:'Oswald'; letter-spacing:.03em; text-transform:uppercase;
+    box-shadow:0 8px 24px rgba(143,191,127,0.35), inset 0 1px 0 rgba(255,255,255,0.5);
+    transition:transform .18s, box-shadow .18s;
+  }
+  .complete-day-btn:hover:not(:disabled){ transform:translateY(-1px); box-shadow:0 10px 28px rgba(143,191,127,0.45), inset 0 1px 0 rgba(255,255,255,0.5); }
+  .complete-day-btn:disabled{
+    background:var(--surface-raised); color:var(--text-dim); cursor:not-allowed;
+    border-color:var(--line); box-shadow:none;
+  }
+
+  .locked-note{ color:var(--text-dim); font-size:.85rem; padding:16px 0; border-top:1px solid var(--line); }
+
+  /* ---------- History ---------- */
+  details.history{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px 22px; margin-bottom:18px; box-shadow: var(--glass-shadow); }
+  details.history summary{ cursor:pointer; font-family:'Oswald'; letter-spacing:.02em; }
+  .hist-row{ display:flex; justify-content:space-between; padding:8px 0; border-top:1px solid var(--line); font-size:.86rem; }
+  .hist-row:first-of-type{ border-top:none; margin-top:10px; }
+  .hist-date{ color:var(--text-dim); font-family:'IBM Plex Mono'; font-size:.78rem; }
+
+  /* ---------- Backup panel ---------- */
+  .backup-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .backup-row .icon-btn{ padding:11px 18px; }
+  input[type=file]{ display:none; }
+
+  /* ---------- Rest timer bar ---------- */
+  .rest-bar{
+    position:fixed; bottom:0; left:0; right:0; background:rgba(15,19,23,0.55);
+    border-top:1px solid rgba(143,191,127,0.4); padding:16px 24px; display:none; align-items:center;
+    justify-content:space-between; gap:16px; z-index:30;
+    box-shadow:0 -12px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12);
+  }
+  .rest-bar.show{ display:flex; }
+  .rest-bar .label{ font-family:'Oswald'; letter-spacing:.03em; }
+  .rest-bar .time{ font-family:'IBM Plex Mono'; font-size:1.6rem; color:var(--accent); min-width:70px; text-align:right; text-shadow:0 0 16px rgba(143,191,127,0.5); }
+  .rest-track{ flex:1; height:7px; background:rgba(255,255,255,0.1); border-radius:var(--radius-pill); overflow:hidden; max-width:400px; box-shadow:inset 0 1px 2px rgba(0,0,0,0.3); }
+  .rest-fill{ height:100%; background:linear-gradient(90deg, var(--accent-dim), var(--accent)); width:100%; box-shadow:0 0 10px rgba(143,191,127,0.6); }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(5,7,9,0.5); display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal{
+    background:rgba(22,26,31,0.62); border:1px solid var(--line); border-radius:24px; padding:26px; max-width:440px; width:100%; max-height:85vh; overflow-y:auto;
+    box-shadow:0 24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.16);
+  }
+  .modal h3{ margin-bottom:12px; }
+  .modal p{ color:var(--text-dim); font-size:.88rem; }
+  .modal input[type=text]{
+    width:100%; background:rgba(0,0,0,0.25); border:1px solid var(--line); color:var(--text);
+    padding:11px 12px; border-radius:var(--radius-sm); margin:10px 0; font-family:'IBM Plex Mono';
+  }
+  .modal-actions{
+    display:flex; gap:10px; justify-content:flex-end; margin-top:14px;
+    position:sticky; bottom:-26px; background:rgba(22,26,31,0.97);
+    padding:12px 0 4px; margin-left:-26px; margin-right:-26px; padding-left:26px; padding-right:26px;
+  }
+  .btn-danger{
+    background:linear-gradient(180deg, rgba(227,140,126,0.95), rgba(210,110,95,0.95)); border:1px solid rgba(255,255,255,0.25); color:#2a1210; font-weight:600;
+    padding:10px 18px; border-radius:var(--radius-pill); cursor:pointer; box-shadow:0 6px 18px rgba(227,140,126,0.35), inset 0 1px 0 rgba(255,255,255,0.4);
+  }
+  .btn-ghost{
+    background:rgba(255,255,255,0.05); border:1px solid var(--line); color:var(--text-dim);
+    padding:10px 18px; border-radius:var(--radius-pill); cursor:pointer;
+  }
+  .btn-ghost:hover{ color:var(--text); border-color:rgba(255,255,255,0.3); }
+
+  /* ---------- Reset options ---------- */
+  .reset-option{
+    border:1px solid var(--line); border-radius:var(--radius); padding:13px 15px; margin-top:10px;
+    background:rgba(255,255,255,0.03);
+  }
+  .reset-option label{ font-size:.88rem; color:var(--text); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .reset-option input[type=number]{
+    background:rgba(0,0,0,0.25); border:1px solid var(--line); color:var(--text);
+    padding:5px 8px; border-radius:8px; font-family:'IBM Plex Mono';
+  }
+  .reset-hint{ color:var(--text-dim); font-size:.76rem; margin:6px 0 0 24px; }
+
+  /* ---------- Verify code ---------- */
+  .verify-code{
+    text-align:center; font-size:2rem; letter-spacing:.35em; color:var(--accent);
+    background:rgba(0,0,0,0.3); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px; margin:14px 0 6px; text-shadow:0 0 20px rgba(143,191,127,0.5);
+    box-shadow:inset 0 2px 8px rgba(0,0,0,0.35);
+  }
+
+  /* ---------- Edit modal ---------- */
+  .edit-modal{ max-width:560px; max-height:85vh; overflow-y:auto; }
+  .edit-label{ display:block; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); margin-top:14px; margin-bottom:4px; }
+  .edit-rest-toggle{
+    display:flex; align-items:center; gap:8px; margin-top:14px; padding:11px 13px;
+    background:rgba(0,0,0,0.22); border:1px solid var(--line); border-radius:var(--radius-sm);
+    font-size:.82rem; color:var(--text); cursor:pointer;
+  }
+  .edit-rest-toggle input{ width:16px; height:16px; flex-shrink:0; }
+  .edit-label select, .edit-label input, .edit-label textarea{
+    width:100%; background:rgba(0,0,0,0.25); border:1px solid var(--line); color:var(--text);
+    padding:10px 11px; border-radius:var(--radius-sm); font-family:'IBM Plex Sans'; font-size:.9rem; margin-top:4px;
+  }
+  .edit-ex-row{
+    background:rgba(255,255,255,0.035); border:1px solid var(--line); border-radius:var(--radius);
+    padding:13px; margin-top:12px; box-shadow: var(--glass-shadow-sm);
+  }
+  .edit-ex-row input[type=text]{
+    width:100%; background:rgba(0,0,0,0.25); border:1px solid var(--line); color:var(--text);
+    padding:9px 11px; border-radius:var(--radius-sm); font-size:.88rem; margin-bottom:8px;
+  }
+  .ee-grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-bottom:8px; }
+  .ee-grid label{ font-size:.68rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; }
+  .ee-grid input{
+    width:100%; background:rgba(0,0,0,0.25); border:1px solid var(--line); color:var(--text);
+    padding:8px 9px; border-radius:var(--radius-sm); margin-top:3px; font-family:'IBM Plex Mono';
+  }
+  .ee-time-label{ display:flex; align-items:center; gap:6px; font-size:.8rem; color:var(--text-dim); margin-bottom:8px; }
+  .ee-remove{
+    background:rgba(227,140,126,0.08); border:1px solid rgba(227,140,126,0.5); color:var(--danger); padding:7px 14px;
+    border-radius:var(--radius-pill); cursor:pointer; font-size:.78rem;
+  }
+
+  /* ---------- Exercise tutorial video ---------- */
+  .ex-video-wrap{
+    position:relative; left:0; width:100%; height:0; padding-bottom:56.25%; margin-top:10px;
+    border-radius:var(--radius-sm); overflow:hidden; background:#000; border:1px solid var(--line);
+    box-shadow: var(--glass-shadow);
+  }
+  .ex-video-wrap iframe{ position:absolute; top:0; left:0; width:100%; height:100%; border:0; }
+
+  /* ---------- Week strip (replaces old ladder) ---------- */
+  .week-strip{
+    display:grid; grid-template-columns:repeat(7,1fr); gap:7px;
+    border:none; border-left:none; padding-left:0; margin-bottom:20px;
+  }
+  .week-strip .ladder-title{ display:none; }
+  .day-box{
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    padding:9px 2px; border-radius:14px; border:1px solid var(--line); background:rgba(255,255,255,0.075);
+    font-size:.62rem; color:var(--text-dim); min-width:0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  }
+  .day-box .dow{ text-transform:uppercase; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .day-box .mark{ width:8px; height:8px; border-radius:50%; background:var(--locked); flex-shrink:0; }
+  .day-box.done{ border-color:rgba(143,191,127,0.45); background:rgba(143,191,127,0.08); }
+  .day-box.done .mark{ background:var(--accent); box-shadow:0 0 8px rgba(143,191,127,0.7); }
+  .day-box.today{ border-color:rgba(143,191,127,0.75); box-shadow:0 0 0 1px rgba(143,191,127,0.3); }
+  .day-box.today .dow{ color:var(--accent); font-weight:600; }
+  @media (max-width:480px){
+    .day-box{ font-size:.56rem; padding:8px 1px; }
+  }
+
+  footer{ text-align:center; color:var(--text-dim); font-size:.75rem; padding:30px 20px 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="rung-mark"></span>
+    <div>
+      <h1>The Ladder</h1>
+      <small>V-Taper Home Program</small>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button class="icon-btn" id="btn-edit">Edit exercises</button>
+    <button class="icon-btn" id="btn-reset">Reset</button>
+    <button class="icon-btn" id="btn-backup">Backup / Restore</button>
+  </div>
+</header>
+
+<div class="layout">
+  <main class="main">
+    <nav class="ladder week-strip" id="ladder"></nav>
+    <div class="stats" id="stats"></div>
+
+    <div id="today-card"></div>
+
+    <details class="history" id="history-wrap">
+      <summary>Training log (locked history)</summary>
+      <div id="history-list"></div>
+    </details>
+  </main>
+</div>
+
+<div class="rest-bar" id="rest-bar">
+  <span class="label">Resting</span>
+  <div class="rest-track"><div class="rest-fill" id="rest-fill"></div></div>
+  <span class="time mono" id="rest-time">00:00</span>
+</div>
+
+<!-- Verification modal (gates Edit and Reset) -->
+<div class="modal-overlay" id="verify-overlay">
+  <div class="modal">
+    <h3>Verify to continue</h3>
+    <p>Type the code below exactly to unlock this action.</p>
+    <div class="verify-code mono" id="verify-code">------</div>
+    <input type="text" id="verify-input" placeholder="Enter code">
+    <p class="verify-error" id="verify-error" style="display:none;color:var(--danger)">Incorrect code — a new one was generated, try again.</p>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="verify-cancel">Cancel</button>
+      <button class="btn-danger" id="verify-confirm">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset options modal -->
+<div class="modal-overlay" id="reset-options-overlay">
+  <div class="modal">
+    <h3 style="color:var(--danger)">Reset</h3>
+    <p>Choose how much to reset. Every option below still needs a verification code before it actually runs.</p>
+
+    <div class="reset-option">
+      <label><input type="radio" name="reset-scope" value="back" checked> Undo the last <input type="number" id="reset-back-n" min="1" value="1" style="width:52px;"> exercise(s) I just marked done today</label>
+      <p class="reset-hint" id="reset-back-hint">You've marked 0 exercise(s) done today.</p>
+    </div>
+
+    <div class="reset-option">
+      <label><input type="radio" name="reset-scope" value="today"> Reset today's workout back to the first exercise</label>
+      <p class="reset-hint">Only today's in-progress session resets. History, streak and exercise edits stay untouched.</p>
+    </div>
+
+    <div class="reset-option">
+      <label><input type="radio" name="reset-scope" value="days"> Go back <input type="number" id="reset-days-n" min="1" value="1" style="width:52px;"> completed day(s) (most recent first)</label>
+      <p class="reset-hint" id="reset-days-hint">You have 0 completed day(s) logged.</p>
+    </div>
+
+    <div class="reset-option">
+      <label><input type="radio" name="reset-scope" value="full"> Full reset — erase everything</label>
+      <p class="reset-hint">Wipes training log, streak, today's progress, and all exercise/video edits. Every day
+        goes back to the original default program. This cannot be undone — export a backup first if unsure.</p>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" id="reset-options-cancel">Cancel</button>
+      <button class="btn-danger" id="reset-options-continue">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit program modal -->
+<div class="modal-overlay" id="edit-overlay">
+  <div class="modal edit-modal">
+    <h3>Edit exercises</h3>
+    <label class="edit-label">Day of week
+      <select id="edit-day-select"></select>
+    </label>
+    <label class="edit-label">Day title
+      <input type="text" id="edit-title">
+    </label>
+    <label class="edit-label">Day description
+      <textarea id="edit-focus" rows="2"></textarea>
+    </label>
+    <label class="edit-rest-toggle">
+      <input type="checkbox" id="edit-is-rest">
+      Mark this day as a Rest Day (skips weekly progression, treated as recovery)
+    </label>
+
+    <div id="edit-exercise-list"></div>
+    <button class="icon-btn" id="edit-add-exercise" type="button">+ Add exercise</button>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" id="edit-close">Close without saving</button>
+      <button class="btn-danger" id="edit-save">Save day</button>
+    </div>
+  </div>
+</div>
+
+<!-- Backup modal -->
+<div class="modal-overlay" id="backup-overlay">
+  <div class="modal">
+    <h3>Backup &amp; restore</h3>
+    <p>Your progress lives only in this browser's storage. Export a backup file regularly, especially before
+      clearing browser data or switching devices.</p>
+    <div class="backup-row">
+      <button class="icon-btn" id="export-btn">⬇ Export backup (.json)</button>
+      <button class="icon-btn" id="import-trigger">⬆ Restore from file</button>
+      <input type="file" id="import-file" accept="application/json">
+    </div>
+    <p style="margin-top:18px;">Restoring will overwrite what's currently saved in this browser with the
+      contents of the backup file.</p>
+    <div class="modal-actions"><button class="btn-ghost" id="backup-close">Close</button></div>
+  </div>
+</div>
+
+<!-- Confirm restore modal -->
+
+<div class="modal-overlay" id="confirm-overlay">
+  <div class="modal">
+    <h3 style="color:var(--danger)">Confirm restore</h3>
+    <p>This replaces your current saved progress with the backup file. This can't be undone. Type
+      <b class="mono">RESTORE</b> to confirm.</p>
+    <input type="text" id="confirm-input" placeholder="Type RESTORE">
+    <div class="modal-actions">
+      <button class="btn-ghost" id="confirm-cancel">Cancel</button>
+      <button class="btn-danger" id="confirm-go">Restore</button>
+    </div>
+  </div>
+</div>
+
+<footer>Data is stored locally in your browser (localStorage). Nothing is sent to a server. Export backups often.</footer>
+
+<script>
+/* ============================================================
+   PROGRAM DEFINITION
+   One fixed template per weekday (Sun..Sat). Whatever real date
+   it is, that weekday's workout is what shows — missed days don't
+   push things around, and nothing is skipped ahead.
+============================================================ */
+const WEEKDAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const WEEKDAY_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+const DEFAULT_WEEK_TEMPLATE = [
+  { title:"Push (Dumbbell Only)", focus:"Chest, front/side delts, triceps — V-taper width from the top down. Every move uses your 2.5kg dumbbell.",
+    exercises:[
+      {name:"Dumbbell Floor Press", sets:3, reps:12, restSec:60, note:"lie on back, press straight up, alternate or both arms", videoUrl:""},
+      {name:"Dumbbell Shoulder Press (alt. arm)", sets:3, reps:10, restSec:60, note:"per arm, seated or standing", videoUrl:""},
+      {name:"Dumbbell Lateral Raise", sets:3, reps:12, restSec:45, videoUrl:""},
+      {name:"Dumbbell Front Raise", sets:3, reps:12, restSec:45, videoUrl:""},
+      {name:"Dumbbell Tricep Kickback", sets:3, reps:12, restSec:45, note:"per arm", videoUrl:""}
+    ]},
+  { title:"Pull (Dumbbell Only)", focus:"Upper back and lats — the width that shapes the taper. Every move uses your 2.5kg dumbbell.",
+    exercises:[
+      {name:"Dumbbell Bent-Over Row (single arm)", sets:3, reps:12, restSec:60, note:"per arm — keep back flat, don't twist", videoUrl:""},
+      {name:"Dumbbell Reverse Fly (bent-over)", sets:3, reps:12, restSec:45, videoUrl:""},
+      {name:"Dumbbell Deadlift", sets:3, reps:12, restSec:60, note:"light weight, focus on form and neutral spine", videoUrl:""},
+      {name:"Dumbbell Bicep Curl", sets:3, reps:12, restSec:40, videoUrl:""},
+      {name:"Dumbbell Hammer Curl", sets:3, reps:12, restSec:40, videoUrl:""}
+    ]},
+  { title:"Legs & Core (Dumbbell Only)", focus:"Full lower body plus core — a tighter waistline. Every move uses your 2.5kg dumbbell.",
+    exercises:[
+      {name:"Dumbbell Goblet Squat", sets:4, reps:15, restSec:60, videoUrl:""},
+      {name:"Dumbbell Reverse Lunges", sets:3, reps:10, restSec:60, note:"per leg, hold dumbbell at chest", videoUrl:""},
+      {name:"Dumbbell Romanian Deadlift", sets:3, reps:12, restSec:60, note:"light and controlled, neutral spine", videoUrl:""},
+      {name:"Dumbbell Calf Raise", sets:3, reps:15, restSec:40, videoUrl:""},
+      {name:"Weighted Sit-up (hold dumbbell at chest)", sets:3, reps:15, restSec:40, videoUrl:""}
+    ]},
+  { title:"Shoulders, Arms & Posture (Dumbbell Only)", focus:"Rounding out delts and arms while training upright, even posture. Every move uses your 2.5kg dumbbell.",
+    exercises:[
+      {name:"Dumbbell Overhead Press", sets:3, reps:10, restSec:60, videoUrl:""},
+      {name:"Dumbbell Lateral Raise", sets:3, reps:12, restSec:45, videoUrl:""},
+      {name:"Dumbbell Rear Delt Fly", sets:3, reps:12, restSec:45, note:"corrects rounded shoulders, supports posture", videoUrl:""},
+      {name:"Dumbbell Curl to Press", sets:3, reps:10, restSec:45, videoUrl:""},
+      {name:"Dumbbell Overhead Tricep Extension (single arm)", sets:3, reps:12, restSec:45, note:"per arm", videoUrl:""}
+    ]},
+  { title:"Height & Spine Care", focus:"Decompression, symmetric core work and mobility — stand taller, support your spine. No weight today.",
+    exercises:[
+      {name:"Cat-Cow Stretch", sets:2, reps:10, restSec:20, videoUrl:""},
+      {name:"Child's Pose Stretch", sets:3, reps:30, restSec:20, note:"seconds hold", isTime:true, videoUrl:""},
+      {name:"Cobra Stretch", sets:3, reps:30, restSec:20, note:"seconds hold", isTime:true, videoUrl:""},
+      {name:"Bird-Dog", sets:3, reps:10, restSec:30, note:"per side — symmetric, spine-friendly core work", videoUrl:""},
+      {name:"Standing Forward Fold", sets:3, reps:30, restSec:20, note:"seconds hold", isTime:true, videoUrl:""},
+      {name:"Wall Posture Drill", sets:3, reps:30, restSec:20, note:"seconds, heels/back/head on wall", isTime:true, videoUrl:""}
+    ]},
+  { title:"Active Recovery / Light Cardio", focus:"Easy conditioning day — keep moving, keep it light.",
+    exercises:[
+      {name:"Jumping Jacks", sets:3, reps:30, restSec:30, note:"seconds", isTime:true, videoUrl:""},
+      {name:"High Knees", sets:3, reps:30, restSec:30, note:"seconds", isTime:true, videoUrl:""},
+      {name:"Mountain Climbers", sets:3, reps:20, restSec:30, videoUrl:""},
+      {name:"Full-Body Stretch Flow", sets:1, reps:300, restSec:0, note:"seconds, self-paced", isTime:true, videoUrl:""}
+    ]},
+  { title:"Rest Day", focus:"Full rest from lifting. A short walk is fine — just today's daily challenge below.", isRestDay:true,
+    exercises:[
+      {name:"Rest & Recover", sets:1, reps:0, restSec:0, note:"mark done to close out today", videoUrl:""}
+    ]}
+];
+// Index 0 = Sunday ... Index 6 = Saturday (matches Date#getDay()).
+
+function challengeLoad(dayNumber, cap, setGrowthEvery){
+  if(dayNumber <= cap) return { sets:1, reps:dayNumber };
+  const extra = dayNumber - cap;
+  return { sets: 1 + Math.floor(extra / setGrowthEvery), reps: cap };
+}
+
+function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+const CUSTOM_PROGRAM_KEY = "vtaper_custom_program_v2";
+function migrateProgram(parsed){
+  parsed.forEach(day => {
+    if(typeof day.isRestDay !== "boolean"){
+      day.isRestDay = day.title === "Rest Day";
+    }
+  });
+  return parsed;
+}
+
+function loadProgram(){
+  const fresh = deepClone(DEFAULT_WEEK_TEMPLATE);
+  try{
+    const raw = localStorage.getItem(CUSTOM_PROGRAM_KEY);
+    if(!raw) return fresh;
+    const parsed = JSON.parse(raw);
+    if(!Array.isArray(parsed) || parsed.length !== 7) return fresh;
+    // Migrate older saved programs (before the Rest Day toggle existed) —
+    // infer isRestDay from the old title-based convention if it's missing.
+    return migrateProgram(parsed);
+  }catch(e){
+    console.error("Could not read custom program, using default:", e);
+    return fresh;
+  }
+}
+function saveCustomProgram(program){
+  localStorage.setItem(CUSTOM_PROGRAM_KEY, JSON.stringify(program));
+}
+let PROGRAM = loadProgram(); // length-7 array, indexed by weekday (0=Sunday)
+
+/* ============================================================
+   DATE HELPERS
+============================================================ */
+function localDateStr(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function daysBetween(aStr, bStr){
+  const a = new Date(aStr + "T00:00:00");
+  const b = new Date(bStr + "T00:00:00");
+  return Math.round((b - a) / 86400000);
+}
+
+/* ============================================================
+   STATE
+============================================================ */
+const STORAGE_KEY = "vtaper_ladder_state_v2";
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const today = localDateStr(new Date());
+    if(!raw) return { startDate: today, history: [] };
+    const parsed = JSON.parse(raw);
+    if(!Array.isArray(parsed.history)) throw new Error("bad shape");
+    if(!parsed.startDate) parsed.startDate = parsed.history[0] ? parsed.history[0].date : today;
+    return parsed;
+  }catch(e){
+    console.error("Could not read saved progress, starting fresh view only (nothing deleted):", e);
+    return { startDate: localDateStr(new Date()), history: [] };
+  }
+}
+function saveState(state){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+let state = loadState();
+let sessionDone = new Set();   // exercise indices marked done for *today's* not-yet-locked-in workout
+let restLocked = false;        // true while a rest timer counts down — hides the next exercise until it ends
+let renderedForDate = null;    // guards against stale session data if the date rolls over while the app is open
+
+/* ============================================================
+   TODAY'S WORKOUT (computed, not stored)
+============================================================ */
+function computeExercisesForDate(dateObj){
+  const weekday = dateObj.getDay();
+  const base = deepClone(PROGRAM[weekday]);
+  const dateStr = localDateStr(dateObj);
+  const weeksElapsed = Math.max(Math.floor(daysBetween(state.startDate, dateStr) / 7), 0);
+  const cappedWeeks = Math.min(weeksElapsed, 8); // progression tapers off after ~8 weeks
+  const repBoost = Math.floor(cappedWeeks/2) * 2;
+  const setBoost = Math.min(Math.floor(cappedWeeks/4), 2);
+  const isRest = !!base.isRestDay;
+
+  const exercises = base.exercises.map(e => ({
+    ...e,
+    reps: isRest ? e.reps : e.reps + (e.isTime ? repBoost*2 : repBoost),
+    sets: isRest ? e.sets : Math.min(e.sets + setBoost, e.sets + 2)
+  }));
+
+  const dayNumber = Math.max(daysBetween(state.startDate, dateStr), 0) + 1;
+  const push = challengeLoad(dayNumber, 20, 15);
+  const pull = challengeLoad(dayNumber, 10, 15);
+  exercises.push(
+    { name:"Daily Push-up Challenge", sets:push.sets, reps:push.reps, restSec:45, isChallenge:true,
+      note:`Day ${dayNumber} → today's target. Grows by 1 rep every calendar day.` },
+    { name:"Daily Pull-up Challenge", sets:pull.sets, reps:pull.reps, restSec:60, isChallenge:true,
+      note:`Day ${dayNumber} → today's target. No bar or not there yet? Substitute Inverted Rows or Negative Pull-ups at the same reps.` }
+  );
+
+  return { weekday, title: base.title, focus: base.focus, isRestDay: isRest, exercises };
+}
+
+/* ============================================================
+   RENDER
+============================================================ */
+function fmtTime(sec){
+  const m = Math.floor(sec/60).toString().padStart(2,"0");
+  const s = Math.floor(sec%60).toString().padStart(2,"0");
+  return m+":"+s;
+}
+
+function computeStreak(history){
+  if(history.length === 0) return 0;
+  const days = history.map(h => h.date).sort().reverse();
+  let streak = 1;
+  let cursor = new Date(days[0] + "T00:00:00");
+  for(let i=1;i<days.length;i++){
+    const prev = new Date(days[i] + "T00:00:00");
+    const diff = Math.round((cursor - prev)/86400000);
+    if(diff === 1){ streak++; cursor = prev; } else if(diff === 0){ continue; } else break;
+  }
+  return streak;
+}
+
+function extractYouTubeId(rawUrl){
+  if(!rawUrl) return null;
+  let str = rawUrl.trim();
+  if(!str) return null;
+  // If someone pasted a full <iframe> embed snippet, pull the src out first.
+  const iframeMatch = str.match(/src=["']([^"']+)["']/i);
+  if(iframeMatch) str = iframeMatch[1];
+  if(!/^https?:\/\//i.test(str)) str = "https://" + str.replace(/^\/\//,"");
+
+  let u;
+  try{ u = new URL(str); }catch(e){ return null; }
+
+  const host = u.hostname.replace(/^www\.|^m\./,"");
+  let id = null;
+
+  if(host === "youtu.be"){
+    id = u.pathname.slice(1);
+  }else if(host === "youtube.com" || host === "youtube-nocookie.com"){
+    if(u.pathname === "/watch") id = u.searchParams.get("v");
+    else if(u.pathname.startsWith("/embed/")) id = u.pathname.split("/embed/")[1];
+    else if(u.pathname.startsWith("/shorts/")) id = u.pathname.split("/shorts/")[1];
+    else if(u.pathname.startsWith("/live/")) id = u.pathname.split("/live/")[1];
+  }
+  if(!id) return null;
+  id = id.split(/[&?/]/)[0];
+  return /^[a-zA-Z0-9_-]{6,}$/.test(id) ? id : null;
+}
+
+function getYouTubeEmbedUrl(url){
+  const id = extractYouTubeId(url);
+  return id ? `https://www.youtube-nocookie.com/embed/${id}` : null;
+}
+
+function render(){
+  const today = new Date();
+  const todayStr = localDateStr(today);
+  if(renderedForDate !== todayStr){
+    // First load, or the date rolled over — restore today's in-progress
+    // exercises from storage if we have them, otherwise start clean.
+    if(state.todaySession && state.todaySession.date === todayStr){
+      sessionDone = new Set(state.todaySession.done);
+    }else{
+      sessionDone = new Set();
+      state.todaySession = { date: todayStr, done: [] };
+      saveState(state);
+    }
+    restLocked = false;
+    renderedForDate = todayStr;
+  }
+  renderStats();
+  renderWeekStrip(today);
+  renderToday(today);
+  renderHistory();
+}
+
+function renderStats(){
+  const el = document.getElementById("stats");
+  const streak = computeStreak(state.history);
+  el.innerHTML = `
+    <div class="stat"><div class="num mono">${streak}</div><div class="label">Current streak</div></div>
+  `;
+}
+
+function renderWeekStrip(today){
+  const el = document.getElementById("ladder");
+  const todayStr = localDateStr(today);
+  const historyDates = new Set(state.history.map(h => h.date));
+  // Show Sunday..Saturday of the current calendar week
+  const sunday = new Date(today);
+  sunday.setDate(today.getDate() - today.getDay());
+  let html = "";
+  for(let i=0;i<7;i++){
+    const d = new Date(sunday);
+    d.setDate(sunday.getDate()+i);
+    const dStr = localDateStr(d);
+    const done = historyDates.has(dStr);
+    const isToday = dStr === todayStr;
+    html += `<div class="day-box ${done?"done":""} ${isToday?"today":""}">
+      <span class="dow">${WEEKDAY_SHORT[i]}</span>
+      <span class="mark"></span>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderToday(today){
+  const el = document.getElementById("today-card");
+  const todayStr = localDateStr(today);
+  const alreadyDone = state.history.some(h => h.date === todayStr);
+
+  if(alreadyDone){
+    const doneEntry = state.history.find(h => h.date === todayStr);
+    el.innerHTML = `<div class="card">
+      <div class="day-eyebrow">${WEEKDAY_NAMES[today.getDay()]} · ${todayStr}</div>
+      <div class="day-title">Today's session is complete ✅</div>
+      <p class="day-focus">You logged "${doneEntry.title}" today. Come back tomorrow — the next day's
+      workout unlocks automatically at midnight.</p>
+    </div>`;
+    return;
+  }
+
+  const day = computeExercisesForDate(today);
+  const totalCount = day.exercises.length;
+  const firstOpenIdx = day.exercises.findIndex((_,i) => !sessionDone.has(i));
+  const allDone = firstOpenIdx === -1;
+  const doneCount = totalCount - (allDone ? 0 : totalCount - firstOpenIdx);
+
+  let body;
+  if(allDone){
+    body = `<p class="day-focus">All ${totalCount} exercises done for today. Lock it in below.</p>`;
+  }else if(restLocked){
+    body = `<div class="locked-note">⏳ Resting — the next exercise appears automatically when the timer ends.</div>`;
+  }else{
+    const ex = day.exercises[firstOpenIdx];
+    const detail = day.isRestDay && !ex.isChallenge
+      ? (ex.note || "mark done to close out today")
+      : `${ex.sets} × ${ex.reps}${ex.isTime ? " sec" : ""}${ex.note ? " · " + ex.note : ""}`;
+    const embedUrl = getYouTubeEmbedUrl(ex.videoUrl);
+    const videoHtml = embedUrl
+      ? `<div class="ex-video-wrap"><iframe src="${embedUrl}?rel=0" title="${escapeHtml(ex.name)} tutorial" scrolling="no" allowfullscreen allow="accelerometer *; clipboard-write *; encrypted-media *; gyroscope *; picture-in-picture *; web-share *;" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+      : "";
+    body = `
+      <div class="exercise ${ex.isChallenge?"ex-challenge":""}" style="flex-direction:column;align-items:stretch;border-top:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div>
+            <div class="ex-name">${ex.isChallenge?"🔥 ":""}${escapeHtml(ex.name)}</div>
+            <div class="ex-detail">${escapeHtml(detail)}</div>
+          </div>
+          <button class="ex-btn" data-idx="${firstOpenIdx}">Mark done</button>
+        </div>
+        ${videoHtml}
+      </div>`;
+  }
+
+  const progressLine = `<div class="day-progress mono">Exercise ${allDone?totalCount:firstOpenIdx+1} of ${totalCount}</div>`;
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="day-eyebrow">${WEEKDAY_NAMES[today.getDay()]} · ${todayStr}</div>
+      <div class="day-title">${escapeHtml(day.title)}</div>
+      <div class="day-focus">${escapeHtml(day.focus)}</div>
+      ${progressLine}
+      ${body}
+      <button class="complete-day-btn" id="complete-day" ${allDone?"":"disabled"}>
+        ${allDone ? "Complete today & lock it in" : "Finish all exercises to complete today"}
+      </button>
+    </div>
+  `;
+
+  const btn = el.querySelector(".ex-btn");
+  if(btn){
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.idx,10);
+      sessionDone.add(idx);
+      state.todaySession = { date: todayStr, done: Array.from(sessionDone) };
+      saveState(state);
+      const ex = day.exercises[idx];
+      const isRestPlaceholder = day.isRestDay && !ex.isChallenge;
+      if(ex.restSec > 0 && !isRestPlaceholder){
+        restLocked = true;
+        renderToday(today);
+        startRestTimer(ex.restSec);
+      } else {
+        renderToday(today);
+      }
+    });
+  }
+
+  const completeBtn = document.getElementById("complete-day");
+  if(completeBtn){
+    completeBtn.addEventListener("click", () => {
+      if(!day.exercises.every((_,i) => sessionDone.has(i))) return;
+      state.history.push({
+        date: todayStr,
+        weekday: today.getDay(),
+        title: day.title
+      });
+      sessionDone = new Set();
+      restLocked = false;
+      state.todaySession = { date: todayStr, done: [] };
+      saveState(state);
+      render();
+    });
+  }
+}
+
+function renderHistory(){
+  const el = document.getElementById("history-list");
+  if(state.history.length === 0){
+    el.innerHTML = `<p class="hist-row" style="border:none;color:var(--text-dim)">No completed days yet — your log fills in as you train.</p>`;
+    return;
+  }
+  el.innerHTML = state.history.slice().reverse().map(h => `
+    <div class="hist-row">
+      <span>${WEEKDAY_NAMES[h.weekday] || ""} · ${escapeHtml(h.title)}</span>
+      <span class="hist-date">${h.date}</span>
+    </div>
+  `).join("");
+}
+
+/* ============================================================
+   REST TIMER
+============================================================ */
+let restInterval = null;
+function startRestTimer(totalSec){
+  clearInterval(restInterval);
+  const bar = document.getElementById("rest-bar");
+  const fill = document.getElementById("rest-fill");
+  const timeEl = document.getElementById("rest-time");
+  let remaining = totalSec;
+  bar.classList.add("show");
+  timeEl.textContent = fmtTime(remaining);
+  fill.style.width = "100%";
+
+  restInterval = setInterval(() => {
+    remaining -= 1;
+    timeEl.textContent = fmtTime(Math.max(remaining,0));
+    fill.style.width = Math.max((remaining/totalSec)*100,0) + "%";
+    if(remaining <= 0){
+      clearInterval(restInterval);
+      bar.classList.remove("show");
+      restLocked = false;
+      render();
+    }
+  }, 1000);
+}
+
+/* ============================================================
+   MODALS
+============================================================ */
+function wireModal(openBtnId, overlayId, closeBtnId){
+  const overlay = document.getElementById(overlayId);
+  document.getElementById(openBtnId).addEventListener("click", () => overlay.classList.add("show"));
+  document.getElementById(closeBtnId).addEventListener("click", () => overlay.classList.remove("show"));
+  overlay.addEventListener("click", (e) => { if(e.target === overlay) overlay.classList.remove("show"); });
+}
+wireModal("btn-backup","backup-overlay","backup-close");
+
+/* ============================================================
+   VERIFICATION GATE (used by Edit and Reset)
+============================================================ */
+function randomCode(len){
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I
+  let out = "";
+  for(let i=0;i<len;i++) out += chars[Math.floor(Math.random()*chars.length)];
+  return out;
+}
+
+let verifyAction = null;
+let verifyCode = "";
+
+function openVerify(action){
+  verifyAction = action;
+  verifyCode = randomCode(6);
+  document.getElementById("verify-code").textContent = verifyCode;
+  document.getElementById("verify-input").value = "";
+  document.getElementById("verify-error").style.display = "none";
+  document.getElementById("verify-overlay").classList.add("show");
+  document.getElementById("verify-input").focus();
+}
+function closeVerify(){
+  document.getElementById("verify-overlay").classList.remove("show");
+  verifyAction = null;
+}
+
+document.getElementById("btn-edit").addEventListener("click", () => openVerify("edit"));
+document.getElementById("verify-cancel").addEventListener("click", closeVerify);
+document.getElementById("verify-overlay").addEventListener("click", (e) => {
+  if(e.target.id === "verify-overlay") closeVerify();
+});
+document.getElementById("verify-confirm").addEventListener("click", () => {
+  const input = document.getElementById("verify-input").value.trim().toUpperCase();
+  if(input === verifyCode){
+    const action = verifyAction;
+    closeVerify();
+    if(action === "edit") openEditModal();
+    if(action === "reset-execute") performReset(pendingResetChoice);
+  }else{
+    verifyCode = randomCode(6);
+    document.getElementById("verify-code").textContent = verifyCode;
+    document.getElementById("verify-input").value = "";
+    document.getElementById("verify-error").style.display = "block";
+    document.getElementById("verify-input").focus();
+  }
+});
+
+/* ============================================================
+   RESET (undo-N / today / full — every path re-verifies)
+============================================================ */
+let pendingResetChoice = null;
+
+function todaysDoneCount(){
+  const todayStr = localDateStr(new Date());
+  if(state.todaySession && state.todaySession.date === todayStr){
+    return state.todaySession.done.length;
+  }
+  return 0;
+}
+
+document.getElementById("btn-reset").addEventListener("click", () => {
+  const doneCount = todaysDoneCount();
+  document.getElementById("reset-back-hint").textContent =
+    `You've marked ${doneCount} exercise(s) done today.`;
+  const backInput = document.getElementById("reset-back-n");
+  backInput.max = Math.max(doneCount,1);
+  backInput.value = Math.min(parseInt(backInput.value,10) || 1, Math.max(doneCount,1));
+
+  const daysLogged = state.history.length;
+  document.getElementById("reset-days-hint").textContent =
+    `You have ${daysLogged} completed day(s) logged.`;
+  const daysInput = document.getElementById("reset-days-n");
+  daysInput.max = Math.max(daysLogged,1);
+  daysInput.value = Math.min(parseInt(daysInput.value,10) || 1, Math.max(daysLogged,1));
+
+  document.querySelector('input[name="reset-scope"][value="back"]').checked = true;
+  document.getElementById("reset-options-overlay").classList.add("show");
+});
+document.getElementById("reset-options-cancel").addEventListener("click", () => {
+  document.getElementById("reset-options-overlay").classList.remove("show");
+});
+document.getElementById("reset-options-overlay").addEventListener("click", (e) => {
+  if(e.target.id === "reset-options-overlay") document.getElementById("reset-options-overlay").classList.remove("show");
+});
+document.getElementById("reset-options-continue").addEventListener("click", () => {
+  const checkedEl = document.querySelector('input[name="reset-scope"]:checked');
+  if(!checkedEl){ alert("Pick an option first."); return; }
+  const scope = checkedEl.value;
+  let choice = { type: scope };
+
+  if(scope === "back"){
+    const doneCount = todaysDoneCount();
+    if(doneCount === 0){
+      alert("Nothing marked done today yet — nothing to undo.");
+      return;
+    }
+    let n = parseInt(document.getElementById("reset-back-n").value,10) || 1;
+    choice.n = Math.max(1, Math.min(n, doneCount));
+  }
+
+  else if(scope === "days"){
+    const daysLogged = state.history.length;
+    if(daysLogged === 0){
+      alert("No completed days logged yet — nothing to go back to.");
+      return;
+    }
+    let n = parseInt(document.getElementById("reset-days-n").value,10) || 1;
+    choice.n = Math.max(1, Math.min(n, daysLogged));
+  }
+
+  pendingResetChoice = choice;
+  document.getElementById("reset-options-overlay").classList.remove("show");
+  openVerify("reset-execute");
+});
+
+function performReset(choice){
+  if(!choice) return;
+  const todayStr = localDateStr(new Date());
+
+  if(choice.type === "full"){
+    localStorage.removeItem(CUSTOM_PROGRAM_KEY);
+    localStorage.removeItem(STORAGE_KEY);
+    PROGRAM = deepClone(DEFAULT_WEEK_TEMPLATE);
+    state = { startDate: todayStr, history: [], todaySession: { date: todayStr, done: [] } };
+    sessionDone = new Set();
+    restLocked = false;
+    clearInterval(restInterval);
+    document.getElementById("rest-bar").classList.remove("show");
+    renderedForDate = null;
+    saveState(state);
+  }
+
+  else if(choice.type === "today"){
+    sessionDone = new Set();
+    restLocked = false;
+    clearInterval(restInterval);
+    document.getElementById("rest-bar").classList.remove("show");
+    state.todaySession = { date: todayStr, done: [] };
+    saveState(state);
+  }
+
+  else if(choice.type === "back"){
+    const doneArr = Array.from(sessionDone).sort((a,b)=>a-b);
+    const keep = doneArr.slice(0, Math.max(doneArr.length - choice.n, 0));
+    sessionDone = new Set(keep);
+    restLocked = false;
+    clearInterval(restInterval);
+    document.getElementById("rest-bar").classList.remove("show");
+    state.todaySession = { date: todayStr, done: keep };
+    saveState(state);
+  }
+
+  else if(choice.type === "days"){
+    // Remove the N most recently completed days from the log, effectively
+    // rolling progress back to how it stood before those days were done.
+    // Since each weekday always maps to the same workout template, the day
+    // that reappears N days ago is exactly the same workout it was then.
+    const removeCount = Math.min(choice.n, state.history.length);
+    state.history = state.history.slice(0, state.history.length - removeCount);
+    sessionDone = new Set();
+    restLocked = false;
+    clearInterval(restInterval);
+    document.getElementById("rest-bar").classList.remove("show");
+    state.todaySession = { date: todayStr, done: [] };
+    saveState(state);
+  }
+
+  pendingResetChoice = null;
+  render();
+}
+
+/* ============================================================
+   EDIT PROGRAM
+============================================================ */
+let currentEditIdx = 0;
+let currentEditDraft = null;
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+
+function openEditModal(){
+  const sel = document.getElementById("edit-day-select");
+  sel.innerHTML = PROGRAM.map((d,i) => `<option value="${i}">${WEEKDAY_NAMES[i]} · ${escapeHtml(d.title)}</option>`).join("");
+  currentEditIdx = new Date().getDay();
+  sel.value = currentEditIdx;
+  loadEditDraft(currentEditIdx);
+  document.getElementById("edit-overlay").classList.add("show");
+}
+document.getElementById("edit-day-select").addEventListener("change", (e) => {
+  loadEditDraft(parseInt(e.target.value,10));
+});
+document.getElementById("edit-close").addEventListener("click", () => {
+  document.getElementById("edit-overlay").classList.remove("show");
+});
+document.getElementById("edit-overlay").addEventListener("click", (e) => {
+  if(e.target.id === "edit-overlay") document.getElementById("edit-overlay").classList.remove("show");
+});
+
+function loadEditDraft(idx){
+  currentEditIdx = idx;
+  currentEditDraft = deepClone(PROGRAM[idx]);
+  renderEditForm();
+}
+
+function renderEditForm(){
+  document.getElementById("edit-title").value = currentEditDraft.title;
+  document.getElementById("edit-focus").value = currentEditDraft.focus;
+  document.getElementById("edit-is-rest").checked = !!currentEditDraft.isRestDay;
+  const list = document.getElementById("edit-exercise-list");
+  list.innerHTML = currentEditDraft.exercises.map((ex,i) => `
+    <div class="edit-ex-row" data-i="${i}">
+      <input type="text" class="ee-name" value="${escapeHtml(ex.name)}" placeholder="Exercise name">
+      <div class="ee-grid">
+        <label>Sets<input type="number" class="ee-sets" value="${ex.sets}" min="0"></label>
+        <label>Reps<input type="number" class="ee-reps" value="${ex.reps}" min="0"></label>
+        <label>Rest (sec)<input type="number" class="ee-rest" value="${ex.restSec}" min="0"></label>
+      </div>
+      <input type="text" class="ee-note" value="${escapeHtml(ex.note || "")}" placeholder="Description / note">
+      <input type="text" class="ee-video" value="${escapeHtml(ex.videoUrl || "")}" placeholder="Tutorial video URL (optional, YouTube)">
+      <label class="ee-time-label"><input type="checkbox" class="ee-time" ${ex.isTime ? "checked" : ""}> time-based (seconds, not reps)</label>
+      <button class="ee-remove" type="button">Remove exercise</button>
+    </div>
+  `).join("");
+
+  list.querySelectorAll(".ee-remove").forEach(btn => {
+    btn.addEventListener("click", () => {
+      collectDraftFromForm();
+      const i = parseInt(btn.closest(".edit-ex-row").dataset.i,10);
+      currentEditDraft.exercises.splice(i,1);
+      renderEditForm();
+    });
+  });
+
+  // Auto-convert whatever YouTube link/embed-snippet is pasted into the
+  // canonical embed URL, right in the field, as soon as the user leaves it.
+  list.querySelectorAll(".ee-video").forEach(input => {
+    input.addEventListener("blur", () => {
+      const val = input.value.trim();
+      if(!val) return;
+      const id = extractYouTubeId(val);
+      if(id){
+        input.value = `https://www.youtube-nocookie.com/embed/${id}`;
+      }
+    });
+  });
+}
+
+function collectDraftFromForm(){
+  currentEditDraft.title = document.getElementById("edit-title").value.trim() || currentEditDraft.title;
+  currentEditDraft.focus = document.getElementById("edit-focus").value;
+  currentEditDraft.isRestDay = document.getElementById("edit-is-rest").checked;
+  const rows = document.querySelectorAll(".edit-ex-row");
+  currentEditDraft.exercises = Array.from(rows).map(row => {
+    const rawVideo = row.querySelector(".ee-video").value.trim();
+    const videoId = extractYouTubeId(rawVideo);
+    return {
+      name: row.querySelector(".ee-name").value.trim() || "Exercise",
+      sets: parseInt(row.querySelector(".ee-sets").value,10) || 0,
+      reps: parseInt(row.querySelector(".ee-reps").value,10) || 0,
+      restSec: parseInt(row.querySelector(".ee-rest").value,10) || 0,
+      note: row.querySelector(".ee-note").value.trim(),
+      videoUrl: videoId ? `https://www.youtube-nocookie.com/embed/${videoId}` : "",
+      isTime: row.querySelector(".ee-time").checked
+    };
+  });
+}
+
+document.getElementById("edit-add-exercise").addEventListener("click", () => {
+  collectDraftFromForm();
+  currentEditDraft.exercises.push({ name:"New Exercise", sets:3, reps:10, restSec:45, note:"", videoUrl:"", isTime:false });
+  renderEditForm();
+});
+
+document.getElementById("edit-save").addEventListener("click", () => {
+  collectDraftFromForm();
+  PROGRAM[currentEditIdx] = currentEditDraft;
+  saveCustomProgram(PROGRAM);
+  document.getElementById("edit-overlay").classList.remove("show");
+  render();
+});
+
+/* ============================================================
+   BACKUP / RESTORE
+============================================================ */
+document.getElementById("export-btn").addEventListener("click", () => {
+  const backup = {
+    state: state,
+    customProgram: JSON.parse(localStorage.getItem(CUSTOM_PROGRAM_KEY) || "null")
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = localDateStr(new Date());
+  a.href = url;
+  a.download = `vtaper-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+let pendingImport = null;
+document.getElementById("import-trigger").addEventListener("click", () => {
+  document.getElementById("import-file").click();
+});
+document.getElementById("import-file").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const parsed = JSON.parse(reader.result);
+      let importedState = null, importedProgram = null;
+      if(parsed && Array.isArray(parsed.history) && parsed.startDate){
+        importedState = parsed;
+      }else if(parsed && parsed.state && Array.isArray(parsed.state.history)){
+        importedState = parsed.state;
+        importedProgram = parsed.customProgram || null;
+      }
+      if(!importedState){
+        alert("This file doesn't look like a valid backup.");
+        return;
+      }
+      pendingImport = { state: importedState, program: importedProgram };
+      document.getElementById("backup-overlay").classList.remove("show");
+      document.getElementById("confirm-overlay").classList.add("show");
+    }catch(err){
+      alert("Couldn't read that file as JSON.");
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+document.getElementById("confirm-cancel").addEventListener("click", () => {
+  pendingImport = null;
+  document.getElementById("confirm-input").value = "";
+  document.getElementById("confirm-overlay").classList.remove("show");
+});
+document.getElementById("confirm-go").addEventListener("click", () => {
+  const val = document.getElementById("confirm-input").value.trim();
+  if(val !== "RESTORE"){
+    alert('Type RESTORE exactly to confirm.');
+    return;
+  }
+  state = pendingImport.state;
+  if(pendingImport.program && Array.isArray(pendingImport.program) && pendingImport.program.length === 7){
+    PROGRAM = migrateProgram(pendingImport.program);
+    saveCustomProgram(PROGRAM);
+  }
+  sessionDone = new Set();
+  restLocked = false;
+  renderedForDate = null;
+  saveState(state);
+  document.getElementById("confirm-input").value = "";
+  document.getElementById("confirm-overlay").classList.remove("show");
+  render();
+});
+
+/* ============================================================
+   INIT
+============================================================ */
+saveState(state); // persist startDate on first-ever load
+render();
+</script>
+</body>
+</html>
